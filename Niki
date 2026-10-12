@@ -1,0 +1,293 @@
+
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ចំណូល និងចំណាយប្រចាំថ្ងៃ</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  margin: 0;
+  padding: 16px;
+  color: #1e293b;
+}
+.container { max-width: 650px; margin: auto; }
+h2 { text-align: center; color: #1d4ed8; }
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.card {
+  background: white;
+  padding: 13px 8px;
+  border-radius: 12px;
+  box-shadow: 0 2px 7px #0000000c;
+}
+.card p { font-size: 12px; margin: 0 0 8px; }
+.card strong { font-size: 16px; overflow-wrap: anywhere; }
+.green { color: #16a34a; }
+.red { color: #dc2626; }
+.blue { color: #2563eb; }
+.panel {
+  background: white;
+  padding: 16px;
+  margin-top: 16px;
+  border-radius: 12px;
+}
+input, select, button {
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 15px;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+.delete { background: #dc2626; width: auto; padding: 8px; }
+.item {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.item small { display: block; color: #64748b; margin-top: 5px; }
+.amount { font-weight: bold; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>💰 ចំណូល និងចំណាយ</h2>
+
+  <div class="cards">
+    <div class="card">
+      <p>ចំណូលសរុប</p>
+      <strong class="green" id="income">$0.00</strong>
+    </div>
+    <div class="card">
+      <p>ចំណាយសរុប</p>
+      <strong class="red" id="expense">$0.00</strong>
+    </div>
+    <div class="card">
+      <p>ប្រាក់នៅសល់</p>
+      <strong class="blue" id="balance">$0.00</strong>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>➕ បន្ថែមប្រតិបត្តិការ</h3>
+    <form id="entryForm">
+      <label>ប្រភេទ</label>
+      <select id="type">
+        <option value="income">ចំណូល</option>
+        <option value="expense">ចំណាយ</option>
+      </select>
+
+      <label>ចំនួនទឹកប្រាក់ ($)</label>
+      <input id="amount" type="number"
+        min="0.01" step="0.01" required placeholder="ឧ. 25.00">
+
+      <label>ប្រភេទរង</label>
+      <select id="category">
+        <option>ប្រាក់ខែ</option>
+        <option>លក់ទំនិញ</option>
+        <option>ចំណូលផ្សេងៗ</option>
+        <option>អាហារ</option>
+        <option>អគ្គិសនី និងទឹក</option>
+        <option>ការធ្វើដំណើរ</option>
+        <option>ការអប់រំ</option>
+        <option>ទិញទំនិញ</option>
+        <option>សុខភាព</option>
+        <option>ចំណាយផ្សេងៗ</option>
+      </select>
+
+      <label>កាលបរិច្ឆេទ</label>
+      <input id="date" type="date" required>
+
+      <label>កំណត់ចំណាំ</label>
+      <input id="note" type="text" placeholder="ឧ. ទិញម្ហូប">
+
+      <button type="submit">រក្សាទុក</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>📅 ប្រវត្តិចំណូល និងចំណាយ</h3>
+    <label>ស្វែងរកតាមកាលបរិច្ឆេទ</label>
+    <input type="date" id="filterDate">
+    <button type="button" onclick="clearFilter()">
+      មើលទិន្នន័យទាំងអស់
+    </button>
+    <div id="history"></div>
+    <button type="button" onclick="exportCSV()">
+      📥 ទាញយករបាយការណ៍ CSV
+    </button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = n => "$" + n.toLocaleString("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
+let entries = [];
+try {
+  entries = JSON.parse(
+    localStorage.getItem("dailyMoneyEntries") || "[]"
+  );
+  if (!Array.isArray(entries)) entries = [];
+} catch {
+  entries = [];
+}
+
+$("date").value = new Date().toLocaleDateString("en-CA");
+$("filterDate").value = "";
+
+function save() {
+  localStorage.setItem("dailyMoneyEntries", JSON.stringify(entries));
+}
+
+function render() {
+  const filter = $("filterDate").value;
+  const visible = entries
+    .filter(e => !filter || e.date === filter)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const income = visible
+    .filter(e => e.type === "income")
+    .reduce((s, e) => s + e.amount, 0);
+
+  const expense = visible
+    .filter(e => e.type === "expense")
+    .reduce((s, e) => s + e.amount, 0);
+
+  $("income").textContent = money(income);
+  $("expense").textContent = money(expense);
+  $("balance").textContent = money(income - expense);
+
+  $("history").innerHTML = "";
+
+  if (!visible.length) {
+    $("history").textContent = "មិនទាន់មានទិន្នន័យ";
+    return;
+  }
+
+  visible.forEach(e => {
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = e.category;
+
+    const info = document.createElement("small");
+    info.textContent = e.date + (e.note ? " · " + e.note : "");
+
+    details.append(title, info);
+
+    const right = document.createElement("div");
+    right.style.textAlign = "right";
+
+    const amount = document.createElement("div");
+    amount.className = "amount " +
+      (e.type === "income" ? "green" : "red");
+    amount.textContent =
+      (e.type === "income" ? "+" : "-") + money(e.amount);
+
+    const del = document.createElement("button");
+    del.className = "delete";
+    del.textContent = "លុប";
+    del.onclick = () => {
+      if (confirm("តើអ្នកចង់លុបទិន្នន័យនេះមែនទេ?")) {
+        entries = entries.filter(x => x.id !== e.id);
+        save();
+        render();
+      }
+    };
+
+    right.append(amount, del);
+    row.append(details, right);
+    $("history").append(row);
+  });
+}
+
+$("entryForm").addEventListener("submit", event => {
+  event.preventDefault();
+
+  const amount = Number($("amount").value);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    alert("សូមបញ្ចូលចំនួនទឹកប្រាក់ត្រឹមត្រូវ");
+    return;
+  }
+
+  entries.push({
+    id: Date.now().toString() + Math.random().toString(36).slice(2),
+    type: $("type").value,
+    amount,
+    category: $("category").value,
+    date: $("date").value,
+    note: $("note").value.trim()
+  });
+
+  save();
+  $("amount").value = "";
+  $("note").value = "";
+  render();
+  alert("រក្សាទុកបានជោគជ័យ!");
+});
+
+$("filterDate").addEventListener("change", render);
+
+function clearFilter() {
+  $("filterDate").value = "";
+  render();
+}
+
+function exportCSV() {
+  const rows = [
+    ["កាលបរិច្ឆេទ", "ប្រភេទ", "ចំណាត់ថ្នាក់", "ចំនួនទឹកប្រាក់ USD", "កំណត់ចំណាំ"],
+    ...entries.map(e => [
+      e.date,
+      e.type === "income" ? "ចំណូល" : "ចំណាយ",
+      e.category,
+      e.amount,
+      e.note
+    ])
+  ];
+
+  const csv = "\uFEFF" + rows.map(row =>
+    row.map(value =>
+      '"' + String(value).replace(/"/g, '""') + '"'
+    ).join(",")
+  ).join("\r\n");
+
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "daily-income-expense.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+render();
+</script>
+</body>
+</html>
